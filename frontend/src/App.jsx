@@ -17,6 +17,8 @@ import AdminOrders from './components/admin/pages/AdminOrders';
 import AdminGiftCategories from './components/admin/pages/AdminGiftCategories';
 import GiftPackageList from './components/gifts/GiftPackageList';
 import GiftPackageDetail from './components/gifts/GiftPackageDetail';
+import EditGiftCategory from './components/admin/pages/EditGiftCategory';
+import AdminAddGiftCategory from './components/admin/pages/AdminAddGiftCategory';
 
 function App() {
   return (
@@ -69,7 +71,8 @@ function App() {
             }
           />
           <Route path="/admin/gift-categories" element={<AdminGiftCategories />} />
-
+          <Route path="/admin/gift-categories/edit/:id" element={<EditGiftCategory />} />
+          <Route path="/admin/gift-categories/create" element={<AdminAddGiftCategory />} />
           {/* Nếu không tìm thấy route */}
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>

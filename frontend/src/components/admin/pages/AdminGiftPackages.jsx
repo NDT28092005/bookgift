@@ -5,6 +5,7 @@ import { Plus, Edit, Trash2, Eye } from 'lucide-react';
 const AdminGiftPackages = () => {
     const [giftPackages, setGiftPackages] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [deletingId, setDeletingId] = useState(null);
 
     useEffect(() => {
         fetchGiftPackages();
@@ -12,11 +13,14 @@ const AdminGiftPackages = () => {
 
     const fetchGiftPackages = async () => {
         try {
-            const response = await fetch('/api/gift-packages');
+            setLoading(true);
+            const response = await fetch('http://localhost:8000/api/gift-packages');
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const data = await response.json();
             setGiftPackages(data);
         } catch (error) {
             console.error('Error fetching gift packages:', error);
+            alert('❌ Không thể tải danh sách gói quà');
         } finally {
             setLoading(false);
         }
@@ -25,12 +29,20 @@ const AdminGiftPackages = () => {
     const handleDelete = async (id) => {
         if (window.confirm('Bạn có chắc chắn muốn xóa gói quà này?')) {
             try {
-                await fetch(`/api/gift-packages/${id}`, {
+                setDeletingId(id);
+                const response = await fetch(`http://localhost:8000/api/gift-packages/${id}`, {
                     method: 'DELETE',
                 });
-                fetchGiftPackages();
+                
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                await fetchGiftPackages();
+                alert('✅ Xóa gói quà thành công!');
             } catch (error) {
                 console.error('Error deleting gift package:', error);
+                alert('❌ Không thể xóa gói quà');
+            } finally {
+                setDeletingId(null);
             }
         }
     };
@@ -69,7 +81,7 @@ const AdminGiftPackages = () => {
                                     <tr key={giftPackage.id}>
                                         <td>
                                             <img 
-                                                src={giftPackage.image_url || '/vite.svg'} 
+                                                src={giftPackage.image_url ? `http://localhost:8000${giftPackage.image_url}` : '/vite.svg'} 
                                                 alt={giftPackage.name}
                                                 className="img-thumbnail"
                                                 style={{ width: '60px', height: '60px', objectFit: 'cover' }}
@@ -126,8 +138,13 @@ const AdminGiftPackages = () => {
                                                     className="btn btn-sm btn-outline-danger"
                                                     onClick={() => handleDelete(giftPackage.id)}
                                                     title="Xóa"
+                                                    disabled={deletingId === giftPackage.id}
                                                 >
-                                                    <Trash2 size={16} />
+                                                    {deletingId === giftPackage.id ? (
+                                                        <div className="spinner-border spinner-border-sm" role="status"></div>
+                                                    ) : (
+                                                        <Trash2 size={16} />
+                                                    )}
                                                 </button>
                                             </div>
                                         </td>

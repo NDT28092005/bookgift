@@ -12,7 +12,7 @@ const AdminGiftCategories = () => {
 
     const fetchCategories = async () => {
         try {
-            const response = await fetch('/api/gift-categories');
+            const response = await fetch('http://localhost:8000/api/gift-categories');
             const data = await response.json();
             setCategories(data);
         } catch (error) {
@@ -25,7 +25,7 @@ const AdminGiftCategories = () => {
     const handleDelete = async (id) => {
         if (window.confirm('Bạn có chắc chắn muốn xóa danh mục này?')) {
             try {
-                await fetch(`/api/gift-categories/${id}`, {
+                await fetch(`http://localhost:8000/api/gift-categories/${id}`, {
                     method: 'DELETE',
                 });
                 fetchCategories();
@@ -70,7 +70,7 @@ const AdminGiftCategories = () => {
                                         <td>
                                             {category.icon_url ? (
                                                 <img 
-                                                    src={category.icon_url} 
+                                                    src={`http://localhost:8000${category.icon_url}`} 
                                                     alt={category.name}
                                                     className="img-thumbnail"
                                                     style={{ width: '40px', height: '40px', objectFit: 'cover' }}

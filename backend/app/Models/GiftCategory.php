@@ -10,13 +10,14 @@ class GiftCategory extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
-        'id', 
-        'name', 
-        'code', 
-        'description', 
+        'id',
+        'name',
+        'code',
+        'description',
         'icon_url',
+        'icon_thumb_url',
         'is_active',
-        'sort_order'
+        'sort_order',
     ];
 
     public function giftPackages()

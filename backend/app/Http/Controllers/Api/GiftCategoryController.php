@@ -1,55 +1,49 @@
 <?php
 
 namespace App\Http\Controllers\Api;
-
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use App\Models\GiftCategory;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Intervention\Image\Facades\Image;
 
 class GiftCategoryController extends Controller
 {
-    public function index(Request $request)
+    public function index()
     {
-        $query = GiftCategory::query();
-
-        if ($request->has('is_active')) {
-            $query->where('is_active', $request->boolean('is_active'));
-        }
-
-        $categories = $query->orderBy('sort_order')->get();
-        
+        $categories = GiftCategory::select('id', 'name', 'code', 'description', 'icon_url', 'is_active', 'sort_order')->get();
         return response()->json($categories);
     }
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
+        $request->validate([
             'name' => 'required|string|max:255',
-            'code' => 'required|string|unique:gift_categories,code',
+            'code' => 'required|string|max:100|unique:gift_categories,code',
             'description' => 'nullable|string',
-            'icon_url' => 'nullable|image|max:1024',
             'is_active' => 'boolean',
-            'sort_order' => 'nullable|integer|min:0',
+            'sort_order' => 'integer',
+            'icon' => 'nullable|image|max:2048', // tối đa 2MB
         ]);
 
-        if ($request->hasFile('icon_url')) {
-            $icon = $request->file('icon_url');
-            $iconPath = $icon->store('category-icons', 'public');
-            $validated['icon_url'] = '/storage/' . $iconPath;
+        $category = new GiftCategory();
+        $category->id = (string) Str::uuid();
+        $category->fill($request->only(['name', 'code', 'description', 'is_active', 'sort_order']));
+
+        if ($request->hasFile('icon')) {
+            $iconUrl = $this->processImage($request->file('icon'));
+            $category->icon_url = $iconUrl;
         }
 
-        $validated['id'] = (string) Str::uuid();
-        $validated['sort_order'] = $validated['sort_order'] ?? 0;
+        $category->save();
 
-        $category = GiftCategory::create($validated);
-
-        return response()->json($category, 201);
+        return response()->json(['message' => 'Tạo danh mục thành công', 'data' => $category]);
     }
 
     public function show($id)
     {
-        $category = GiftCategory::with('giftPackages')->findOrFail($id);
+        $category = GiftCategory::findOrFail($id);
         return response()->json($category);
     }
 
@@ -57,25 +51,60 @@ class GiftCategoryController extends Controller
     {
         $category = GiftCategory::findOrFail($id);
 
-        $validated = $request->validate([
-            'name' => 'sometimes|string|max:255',
-            'code' => 'sometimes|string|unique:gift_categories,code,' . $id,
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'code' => 'required|string|max:100|unique:gift_categories,code,' . $id,
             'description' => 'nullable|string',
-            'icon_url' => 'nullable|string',
             'is_active' => 'boolean',
-            'sort_order' => 'nullable|integer|min:0',
+            'sort_order' => 'integer',
+            'icon' => 'nullable|image|max:2048',
         ]);
 
-        $category->update($validated);
+        $category->fill($request->only(['name', 'code', 'description', 'is_active', 'sort_order']));
 
-        return response()->json($category);
+        // Xóa ảnh cũ nếu có ảnh mới
+        if ($request->hasFile('icon')) {
+            $this->deleteOldImage($category);
+
+            $iconUrl = $this->processImage($request->file('icon'));
+            $category->icon_url = $iconUrl;
+        }
+
+        $category->save();
+
+        return response()->json(['message' => 'Cập nhật danh mục thành công', 'data' => $category]);
     }
 
     public function destroy($id)
     {
         $category = GiftCategory::findOrFail($id);
+        $this->deleteOldImage($category);
         $category->delete();
 
-        return response()->json(['message' => 'Gift category deleted successfully']);
+        return response()->json(['message' => 'Đã xóa danh mục']);
+    }
+
+    // ===========================
+    // 🔧 HÀM PHỤ XỬ LÝ ẢNH
+    // ===========================
+
+    private function processImage($file)
+    {
+        $fileName = Str::uuid() . '.webp';
+
+        // Lưu ảnh gốc (nén 80%)
+        $originalPath = 'public/icons/original/' . $fileName;
+        $image = Image::make($file)->encode('webp', 80);
+        Storage::put($originalPath, (string) $image);
+
+        return Storage::url($originalPath);
+    }
+
+    private function deleteOldImage($category)
+    {
+        if ($category->icon_url) {
+            $oldImagePath = str_replace('/storage/', 'public/', $category->icon_url);
+            Storage::delete($oldImagePath);
+        }
     }
 }
