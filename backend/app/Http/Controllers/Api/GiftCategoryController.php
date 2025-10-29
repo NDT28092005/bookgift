@@ -1,110 +1,216 @@
 <?php
 
 namespace App\Http\Controllers\Api;
+
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\GiftCategory;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
-use Intervention\Image\Facades\Image;
+use Illuminate\Support\Facades\Log;
 
 class GiftCategoryController extends Controller
 {
     public function index()
     {
-        $categories = GiftCategory::select('id', 'name', 'code', 'description', 'icon_url', 'is_active', 'sort_order')->get();
-        return response()->json($categories);
+        return response()->json(GiftCategory::orderBy('sort_order')->get());
     }
 
     public function store(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'code' => 'required|string|max:100|unique:gift_categories,code',
+            'code' => 'required|string|unique:gift_categories,code',
             'description' => 'nullable|string',
             'is_active' => 'boolean',
-            'sort_order' => 'integer',
-            'icon' => 'nullable|image|max:2048', // tối đa 2MB
+            'sort_order' => 'nullable|integer',
         ]);
 
-        $category = new GiftCategory();
-        $category->id = (string) Str::uuid();
-        $category->fill($request->only(['name', 'code', 'description', 'is_active', 'sort_order']));
-
-        if ($request->hasFile('icon')) {
-            $iconUrl = $this->processImage($request->file('icon'));
-            $category->icon_url = $iconUrl;
+        // Xử lý upload ảnh
+        if ($request->hasFile('file')) {
+            $file = $request->file('file');
+            $filename = time() . '_' . $file->getClientOriginalName();
+            
+            // Tạo thư mục nếu chưa có
+            if (!Storage::disk('public')->exists('categories')) {
+                Storage::disk('public')->makeDirectory('categories');
+            }
+            
+            // Lưu file
+            $file->storeAs('public/categories', $filename);
+            $validated['icon_url'] = env('APP_URL') . '/storage/categories/' . $filename;
         }
 
-        $category->save();
-
-        return response()->json(['message' => 'Tạo danh mục thành công', 'data' => $category]);
+        $category = GiftCategory::create($validated);
+        return response()->json($category, 201);
     }
 
     public function show($id)
     {
-        $category = GiftCategory::findOrFail($id);
-        return response()->json($category);
+        return response()->json(GiftCategory::findOrFail($id));
     }
 
     public function update(Request $request, $id)
     {
-        $category = GiftCategory::findOrFail($id);
-
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'code' => 'required|string|max:100|unique:gift_categories,code,' . $id,
-            'description' => 'nullable|string',
-            'is_active' => 'boolean',
-            'sort_order' => 'integer',
-            'icon' => 'nullable|image|max:2048',
+        Log::info('GiftCategory update called', [
+            'id' => $id,
+            'has_file' => $request->hasFile('file'),
+            'all_data' => $request->all(),
+            'files' => $request->allFiles()
         ]);
 
-        $category->fill($request->only(['name', 'code', 'description', 'is_active', 'sort_order']));
+        $category = GiftCategory::findOrFail($id);
 
-        // Xóa ảnh cũ nếu có ảnh mới
-        if ($request->hasFile('icon')) {
-            $this->deleteOldImage($category);
+        $validated = $request->validate([
+            'name' => 'sometimes|string|max:255',
+            'code' => 'sometimes|string|unique:gift_categories,code,' . $category->id,
+            'description' => 'nullable|string',
+            'is_active' => 'boolean',
+            'sort_order' => 'sometimes|integer',
+        ]);
 
-            $iconUrl = $this->processImage($request->file('icon'));
-            $category->icon_url = $iconUrl;
+        // Xử lý upload ảnh mới
+        if ($request->hasFile('file')) {
+            Log::info('File detected, processing upload');
+            $file = $request->file('file');
+            $filename = time() . '_' . $file->getClientOriginalName();
+            
+            Log::info('File details', [
+                'original_name' => $file->getClientOriginalName(),
+                'size' => $file->getSize(),
+                'mime_type' => $file->getMimeType(),
+                'filename' => $filename
+            ]);
+            
+            // Tạo thư mục nếu chưa có
+            if (!Storage::disk('public')->exists('categories')) {
+                Storage::disk('public')->makeDirectory('categories');
+                Log::info('Created categories directory');
+            }
+            
+            // Xóa ảnh cũ nếu có (kiểm tra cả 2 thư mục cũ và mới)
+            if ($category->icon_url) {
+                $oldFilename = basename($category->icon_url);
+                
+                // Thử xóa từ thư mục cũ (category-icons)
+                $oldPath1 = 'category-icons/' . $oldFilename;
+                if (Storage::disk('public')->exists($oldPath1)) {
+                    Storage::disk('public')->delete($oldPath1);
+                    Log::info('Deleted old image from category-icons', ['path' => $oldPath1]);
+                }
+                
+                // Thử xóa từ thư mục mới (categories)
+                $oldPath2 = 'categories/' . $oldFilename;
+                if (Storage::disk('public')->exists($oldPath2)) {
+                    Storage::disk('public')->delete($oldPath2);
+                    Log::info('Deleted old image from categories', ['path' => $oldPath2]);
+                }
+            }
+            
+            // Lưu file mới
+            $saved = $file->storeAs('public/categories', $filename);
+            Log::info('File saved', ['saved_path' => $saved, 'filename' => $filename]);
+            
+            $validated['icon_url'] = env('APP_URL') . '/storage/categories/' . $filename;
+            Log::info('New icon_url set', ['icon_url' => $validated['icon_url']]);
+        } else {
+            Log::info('No file uploaded, keeping existing icon_url');
         }
 
-        $category->save();
+        $category->update($validated);
+        Log::info('Category updated successfully', ['updated_data' => $validated]);
+        
+        return response()->json($category);
+    }
 
-        return response()->json(['message' => 'Cập nhật danh mục thành công', 'data' => $category]);
+    public function uploadImage(Request $request, $id)
+    {
+        Log::info('GiftCategory uploadImage called', [
+            'id' => $id,
+            'has_file' => $request->hasFile('file'),
+            'all_data' => $request->all(),
+            'files' => $request->allFiles(),
+            'content_type' => $request->header('Content-Type')
+        ]);
+
+        $category = GiftCategory::findOrFail($id);
+
+        $validated = $request->validate([
+            'name' => 'sometimes|string|max:255',
+            'code' => 'sometimes|string|unique:gift_categories,code,' . $category->id,
+            'description' => 'nullable|string',
+            'is_active' => 'sometimes|boolean',
+            'sort_order' => 'sometimes|integer',
+            'file' => 'nullable|image|max:5120',
+        ]);
+
+        // Xử lý upload ảnh mới
+        if ($request->hasFile('file')) {
+            Log::info('File detected, processing upload');
+            $file = $request->file('file');
+            $filename = time() . '_' . $file->getClientOriginalName();
+            
+            Log::info('File details', [
+                'original_name' => $file->getClientOriginalName(),
+                'size' => $file->getSize(),
+                'mime_type' => $file->getMimeType(),
+                'filename' => $filename
+            ]);
+            
+            // Tạo thư mục nếu chưa có
+            if (!Storage::disk('public')->exists('categories')) {
+                Storage::disk('public')->makeDirectory('categories');
+                Log::info('Created categories directory');
+            }
+            
+            // Xóa ảnh cũ nếu có (kiểm tra cả 2 thư mục cũ và mới)
+            if ($category->icon_url) {
+                $oldFilename = basename($category->icon_url);
+                
+                // Thử xóa từ thư mục cũ (category-icons)
+                $oldPath1 = 'category-icons/' . $oldFilename;
+                if (Storage::disk('public')->exists($oldPath1)) {
+                    Storage::disk('public')->delete($oldPath1);
+                    Log::info('Deleted old image from category-icons', ['path' => $oldPath1]);
+                }
+                
+                // Thử xóa từ thư mục mới (categories)
+                $oldPath2 = 'categories/' . $oldFilename;
+                if (Storage::disk('public')->exists($oldPath2)) {
+                    Storage::disk('public')->delete($oldPath2);
+                    Log::info('Deleted old image from categories', ['path' => $oldPath2]);
+                }
+            }
+            
+            // Lưu file mới
+            $saved = $file->storeAs('public/categories', $filename);
+            Log::info('File saved', ['saved_path' => $saved, 'filename' => $filename]);
+            
+            $validated['icon_url'] = env('APP_URL') . '/storage/categories/' . $filename;
+            Log::info('New icon_url set', ['icon_url' => $validated['icon_url']]);
+        } else {
+            Log::info('No file uploaded, keeping existing icon_url');
+        }
+
+        $category->update($validated);
+        Log::info('Category updated successfully', ['updated_data' => $validated]);
+        
+        return response()->json($category);
     }
 
     public function destroy($id)
     {
         $category = GiftCategory::findOrFail($id);
-        $this->deleteOldImage($category);
-        $category->delete();
 
-        return response()->json(['message' => 'Đã xóa danh mục']);
-    }
-
-    // ===========================
-    // 🔧 HÀM PHỤ XỬ LÝ ẢNH
-    // ===========================
-
-    private function processImage($file)
-    {
-        $fileName = Str::uuid() . '.webp';
-
-        // Lưu ảnh gốc (nén 80%)
-        $originalPath = 'public/icons/original/' . $fileName;
-        $image = Image::make($file)->encode('webp', 80);
-        Storage::put($originalPath, (string) $image);
-
-        return Storage::url($originalPath);
-    }
-
-    private function deleteOldImage($category)
-    {
+        // Xóa ảnh nếu có
         if ($category->icon_url) {
-            $oldImagePath = str_replace('/storage/', 'public/', $category->icon_url);
-            Storage::delete($oldImagePath);
+            $filename = basename($category->icon_url);
+            $path = 'categories/' . $filename;
+            if (Storage::disk('public')->exists($path)) {
+                Storage::disk('public')->delete($path);
+            }
         }
+
+        $category->delete();
+        return response()->json(['message' => 'Deleted successfully']);
     }
 }

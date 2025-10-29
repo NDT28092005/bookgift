@@ -1,162 +1,103 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Plus, Edit, Trash2, Eye } from 'lucide-react';
+import React, { useEffect, useState } from "react";
+import packageApi from "../../../api/packageApi";
+import categoryApi from "../../../api/categoryApi";
+import Button  from "../../ui/Button";
 
-const AdminGiftPackages = () => {
-    const [giftPackages, setGiftPackages] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [deletingId, setDeletingId] = useState(null);
+export default function PackageList() {
+  const [packages, setPackages] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [formData, setFormData] = useState({
+    name: "",
+    price: "",
+    category_id: "",
+  });
 
-    useEffect(() => {
-        fetchGiftPackages();
-    }, []);
+  const fetchData = async () => {
+    const [pkgRes, catRes] = await Promise.all([
+      packageApi.getAll(),
+      categoryApi.getAll(),
+    ]);
+    setPackages(pkgRes.data);
+    setCategories(catRes.data);
+  };
 
-    const fetchGiftPackages = async () => {
-        try {
-            setLoading(true);
-            const response = await fetch('http://localhost:8000/api/gift-packages');
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const data = await response.json();
-            setGiftPackages(data);
-        } catch (error) {
-            console.error('Error fetching gift packages:', error);
-            alert('❌ Không thể tải danh sách gói quà');
-        } finally {
-            setLoading(false);
-        }
-    };
+  useEffect(() => {
+    fetchData();
+  }, []);
 
-    const handleDelete = async (id) => {
-        if (window.confirm('Bạn có chắc chắn muốn xóa gói quà này?')) {
-            try {
-                setDeletingId(id);
-                const response = await fetch(`http://localhost:8000/api/gift-packages/${id}`, {
-                    method: 'DELETE',
-                });
-                
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                
-                await fetchGiftPackages();
-                alert('✅ Xóa gói quà thành công!');
-            } catch (error) {
-                console.error('Error deleting gift package:', error);
-                alert('❌ Không thể xóa gói quà');
-            } finally {
-                setDeletingId(null);
-            }
-        }
-    };
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    await packageApi.create(formData);
+    setFormData({ name: "", price: "", category_id: "" });
+    fetchData();
+  };
 
-    if (loading) {
-        return <div className="d-flex justify-content-center p-5"><div className="spinner-border" role="status"></div></div>;
+  const handleDelete = async (id) => {
+    if (window.confirm("Xóa gói quà này?")) {
+      await packageApi.delete(id);
+      fetchData();
     }
+  };
 
-    return (
-        <div className="container-fluid">
-            <div className="d-flex justify-content-between align-items-center mb-4">
-                <h2>Quản Lý Gói Quà</h2>
-                <Link to="/admin/gift-packages/create" className="btn btn-primary">
-                    <Plus size={20} className="me-2" />
-                    Thêm Gói Quà
-                </Link>
-            </div>
+  return (
+    <div className="p-6">
+      <h2 className="text-xl font-bold mb-4">Quản lý gói quà 🎈</h2>
 
-            <div className="card">
-                <div className="card-body">
-                    <div className="table-responsive">
-                        <table className="table table-hover">
-                            <thead>
-                                <tr>
-                                    <th>Hình Ảnh</th>
-                                    <th>Tên Gói Quà</th>
-                                    <th>Danh Mục</th>
-                                    <th>Giá</th>
-                                    <th>Trạng Thái</th>
-                                    <th>Nổi Bật</th>
-                                    <th>Hành Động</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {giftPackages.map((giftPackage) => (
-                                    <tr key={giftPackage.id}>
-                                        <td>
-                                            <img 
-                                                src={giftPackage.image_url ? `http://localhost:8000${giftPackage.image_url}` : '/vite.svg'} 
-                                                alt={giftPackage.name}
-                                                className="img-thumbnail"
-                                                style={{ width: '60px', height: '60px', objectFit: 'cover' }}
-                                            />
-                                        </td>
-                                        <td>
-                                            <div>
-                                                <strong>{giftPackage.name}</strong>
-                                                <br />
-                                                <small className="text-muted">{giftPackage.slug}</small>
-                                            </div>
-                                        </td>
-                                        <td>{giftPackage.category?.name || 'N/A'}</td>
-                                        <td>
-                                            <div>
-                                                <span className="text-primary fw-bold">
-                                                    {new Intl.NumberFormat('vi-VN').format(giftPackage.price)}đ
-                                                </span>
-                                                {giftPackage.original_price && (
-                                                    <div>
-                                                        <small className="text-muted text-decoration-line-through">
-                                                            {new Intl.NumberFormat('vi-VN').format(giftPackage.original_price)}đ
-                                                        </small>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <span className={`badge ${
-                                                giftPackage.status === 'active' ? 'bg-success' : 
-                                                giftPackage.status === 'inactive' ? 'bg-secondary' : 'bg-warning'
-                                            }`}>
-                                                {giftPackage.status === 'active' ? 'Hoạt động' :
-                                                 giftPackage.status === 'inactive' ? 'Không hoạt động' : 'Hết hàng'}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            {giftPackage.is_featured ? (
-                                                <span className="badge bg-warning">Nổi bật</span>
-                                            ) : (
-                                                <span className="text-muted">-</span>
-                                            )}
-                                        </td>
-                                        <td>
-                                            <div className="btn-group" role="group">
-                                                <Link 
-                                                    to={`/admin/gift-packages/edit/${giftPackage.id}`}
-                                                    className="btn btn-sm btn-outline-primary"
-                                                    title="Chỉnh sửa"
-                                                >
-                                                    <Edit size={16} />
-                                                </Link>
-                                                <button 
-                                                    className="btn btn-sm btn-outline-danger"
-                                                    onClick={() => handleDelete(giftPackage.id)}
-                                                    title="Xóa"
-                                                    disabled={deletingId === giftPackage.id}
-                                                >
-                                                    {deletingId === giftPackage.id ? (
-                                                        <div className="spinner-border spinner-border-sm" role="status"></div>
-                                                    ) : (
-                                                        <Trash2 size={16} />
-                                                    )}
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
+      <form onSubmit={handleSubmit} className="mb-6 space-y-2">
+        <input
+          className="border p-2 w-full"
+          placeholder="Tên gói quà"
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+        />
+        <input
+          className="border p-2 w-full"
+          placeholder="Giá (VND)"
+          type="number"
+          value={formData.price}
+          onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+        />
+        <select
+          className="border p-2 w-full"
+          value={formData.category_id}
+          onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+        >
+          <option value="">-- Chọn danh mục --</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <Button type="submit">Thêm gói quà</Button>
+      </form>
 
-export default AdminGiftPackages;
+      <table className="w-full border">
+        <thead className="bg-gray-100">
+          <tr>
+            <th className="p-2 text-left">Tên</th>
+            <th className="p-2 text-left">Giá</th>
+            <th className="p-2 text-left">Danh mục</th>
+            <th className="p-2 text-left">Trạng thái</th>
+            <th className="p-2 text-left">Hành động</th>
+          </tr>
+        </thead>
+        <tbody>
+          {packages.map((pkg) => (
+            <tr key={pkg.id} className="border-b">
+              <td className="p-2">{pkg.name}</td>
+              <td className="p-2">{pkg.price}</td>
+              <td className="p-2">{pkg.category?.name}</td>
+              <td className="p-2">{pkg.status}</td>
+              <td className="p-2">
+                <Button variant="destructive" onClick={() => handleDelete(pkg.id)}>
+                  Xóa
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}

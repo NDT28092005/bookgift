@@ -16,14 +16,40 @@ use App\Http\Controllers\Api\WishlistController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\SystemSettingController;
 use App\Http\Controllers\Admin\Auth\AdminAuthController;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 
+Route::post('/upload', function (Request $request) {
+    $request->validate([
+        'file' => 'required|image|max:5120',
+    ]);
 
+    $img = $request->file('file');
+    $filename = uniqid() . '.' . $img->getClientOriginalExtension();
+
+    // Tạo thư mục nếu chưa tồn tại
+    if (!Storage::disk('public')->exists('category-icons')) {
+        Storage::disk('public')->makeDirectory('category-icons');
+    }
+
+    // Lưu file gốc
+    $saved = Storage::disk('public')->putFileAs('category-icons', $img, $filename);
+    
+    if ($saved) {
+        $url = env('APP_URL') . '/storage/category-icons/' . $filename;
+        return response()->json(['url' => $url, 'success' => true]);
+    } else {
+        return response()->json(['error' => 'Upload failed'], 500);
+    }
+});
 // Gift Categories Routes
-Route::get('/gift-categories', [GiftCategoryController::class, 'index']);
-Route::post('/gift-categories', [GiftCategoryController::class, 'store']);
-Route::get('/gift-categories/{id}', [GiftCategoryController::class, 'show']);
-Route::put('/gift-categories/{id}', [GiftCategoryController::class, 'update']);
-Route::delete('/gift-categories/{id}', [GiftCategoryController::class, 'destroy']);
+Route::apiResource('gift-categories', GiftCategoryController::class);
+Route::post('/gift-categories/{id}/upload', [GiftCategoryController::class, 'uploadImage']);
+// Route::get('/gift-categories', [GiftCategoryController::class, 'index']);
+// Route::post('/gift-categories', [GiftCategoryController::class, 'store']);
+// Route::get('/gift-categories/{id}', [GiftCategoryController::class, 'show']);
+// Route::put('/gift-categories/{id}', [GiftCategoryController::class, 'update']);
+// Route::delete('/gift-categories/{id}', [GiftCategoryController::class, 'destroy']);
 
 // Gift Packages Routes
 Route::prefix('gift-packages')->group(function () {
@@ -50,7 +76,7 @@ Route::prefix('coupons')->group(function () {
     Route::post('/', [CouponController::class, 'store']);              // Tạo coupon
     Route::put('/{id}', [CouponController::class, 'update']);          // Cập nhật coupon
     Route::delete('/{id}', [CouponController::class, 'destroy']);      // Xóa coupon
-    Route::post('/validate', [CouponController::class, 'validate']);    // Kiểm tra coupon
+    Route::post('/validate', [CouponController::class, 'validateCoupon']);    // Kiểm tra coupon
 });
 
 // Wishlists Routes

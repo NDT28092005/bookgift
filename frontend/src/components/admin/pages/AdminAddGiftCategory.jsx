@@ -1,190 +1,173 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Upload } from 'lucide-react';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import axiosClient from "../../../api/axiosClient";
 
-const AdminAddGiftCategory = () => {
-  const navigate = useNavigate();
-  const [formData, setFormData] = useState({
-    name: '',
-    code: '',
-    description: '',
-    is_active: true,
-    sort_order: 0
-  });
-  const [icon, setIcon] = useState(null);
-  const [preview, setPreview] = useState(null);
-
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData({ ...formData, [name]: type === 'checkbox' ? checked : value });
-  };
-
-  // Xử lý upload icon
-  const handleIconChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    setIcon(file);
-    setPreview(URL.createObjectURL(file)); // hiện ảnh xem trước
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    const sendData = new FormData();
-    
-    // Chỉ gửi các field có giá trị và không phải null/undefined
-    Object.keys(formData).forEach(key => {
-      const value = formData[key];
-      if (value !== null && value !== undefined && value !== '') {
-        // Xử lý đặc biệt cho boolean values
-        if (typeof value === 'boolean') {
-          sendData.append(key, value ? '1' : '0');
-        } else {
-          sendData.append(key, value);
-        }
-      }
+export default function AdminAddGiftCategory() {
+    const navigate = useNavigate();
+    const [formData, setFormData] = useState({
+        name: "",
+        code: "",
+        description: "",
+        is_active: true,
+        sort_order: 0
     });
-    
-    if (icon) sendData.append('icon', icon);
+    const [loading, setLoading] = useState(false);
+    const [preview, setPreview] = useState(null);
+    const [selectedFile, setSelectedFile] = useState(null);
 
-    console.log('Sending category data:', Object.fromEntries(sendData)); // Debug log
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
 
-    try {
-      const response = await fetch('http://localhost:8000/api/gift-categories', {
-        method: 'POST',
-        body: sendData,
-      });
+        try {
+            const form = new FormData();
+            form.append("name", formData.name);
+            form.append("code", formData.code);
+            form.append("description", formData.description);
+            form.append("is_active", formData.is_active);
+            form.append("sort_order", formData.sort_order);
+            
+            if (selectedFile) {
+                form.append("file", selectedFile);
+                console.log('File selected:', selectedFile.name);
+            }
 
-      console.log('Response status:', response.status); // Debug log
+            console.log('Sending create request...', {
+                hasFile: !!selectedFile,
+                formData: Object.fromEntries(form.entries())
+            });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response:', errorText);
-        throw new Error(`Lỗi ${response.status}: ${errorText}`);
-      }
+            // Sử dụng fetch cho upload file
+            const token = localStorage.getItem("token");
+            const res = await fetch('http://localhost:8000/api/gift-categories', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: form
+            });
+            
+            if (!res.ok) {
+                throw new Error(`HTTP error! status: ${res.status}`);
+            }
+            
+            const data = await res.json();
+            console.log('Create successful:', data);
+            
+            alert('Tạo danh mục thành công!');
+            navigate("/admin/gift-categories");
+        } catch (err) {
+            console.error('Create error:', err);
+            alert(`Tạo danh mục thất bại: ${err.response?.data?.message || err.message}`);
+        }
 
-      const result = await response.json();
-      console.log('Success response:', result); // Debug log
+        setLoading(false);
+    };
 
-      alert('✅ Thêm danh mục thành công!');
-      navigate('/admin/gift-categories');
-    } catch (error) {
-      console.error(error);
-      alert(`❌ Có lỗi xảy ra khi thêm danh mục: ${error.message}`);
-    }
-  };
+    const handleFileChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setSelectedFile(file);
+            setPreview(URL.createObjectURL(file));
+        }
+    };
 
-  return (
-    <div className="container mt-5">
-      <h2>Thêm Danh Mục Gói Quà 🎁</h2>
+    return (
+        <div className="p-6">
+            <h2 className="text-2xl font-bold mb-6">Thêm danh mục mới 🎁</h2>
 
-      <form onSubmit={handleSubmit} className="mt-4">
-        <div className="mb-3">
-          <label className="form-label">Tên danh mục</label>
-          <input
-            type="text"
-            name="name"
-            className="form-control"
-            value={formData.name}
-            onChange={handleChange}
-            required
-          />
+            <form onSubmit={handleSubmit} className="max-w-2xl space-y-6">
+                <div>
+                    <label className="block text-sm font-medium mb-2">Tên danh mục *</label>
+                    <input
+                        type="text"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        required
+                    />
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium mb-2">Mã code *</label>
+                    <input
+                        type="text"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={formData.code}
+                        onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                        required
+                    />
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium mb-2">Mô tả</label>
+                    <textarea
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        rows="3"
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    />
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium mb-2">Ảnh icon</label>
+                    {preview && (
+                        <div className="mb-4">
+                            <img
+                                src={preview}
+                                alt="Preview"
+                                className="w-24 h-24 object-cover rounded-lg border"
+                            />
+                        </div>
+                    )}
+                    <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium mb-2">Thứ tự sắp xếp</label>
+                    <input
+                        type="number"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={formData.sort_order}
+                        onChange={(e) => setFormData({ ...formData, sort_order: parseInt(e.target.value) || 0 })}
+                    />
+                </div>
+
+                <div className="flex items-center">
+                    <input
+                        type="checkbox"
+                        id="is_active"
+                        className="mr-2"
+                        checked={formData.is_active}
+                        onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                    />
+                    <label htmlFor="is_active" className="text-sm font-medium">
+                        Hoạt động
+                    </label>
+                </div>
+
+                <div className="flex gap-4">
+                    <button
+                        type="submit"
+                        disabled={loading}
+                        className="px-6 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 disabled:opacity-50"
+                    >
+                        {loading ? "Đang tạo..." : "Tạo danh mục"}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => navigate("/admin/gift-categories")}
+                        className="px-6 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600"
+                    >
+                        Hủy
+                    </button>
+                </div>
+            </form>
         </div>
-
-        <div className="mb-3">
-          <label className="form-label">Mã code</label>
-          <input
-            type="text"
-            name="code"
-            className="form-control"
-            value={formData.code}
-            onChange={handleChange}
-            required
-          />
-        </div>
-
-        <div className="mb-3">
-          <label className="form-label">Mô tả</label>
-          <textarea
-            name="description"
-            className="form-control"
-            value={formData.description}
-            onChange={handleChange}
-          ></textarea>
-        </div>
-
-        {/* Upload icon */}
-        <div className="mb-3">
-          <label className="form-label">Icon danh mục</label>
-          <div className="d-flex align-items-center gap-3">
-            {preview && (
-              <img
-                src={preview}
-                alt="preview"
-                style={{
-                  width: '80px',
-                  height: '80px',
-                  objectFit: 'cover',
-                  borderRadius: '8px',
-                }}
-              />
-            )}
-            <div>
-              <label className="btn btn-outline-primary">
-                <Upload size={16} className="me-2" />
-                Chọn icon
-                <input
-                  type="file"
-                  accept="image/*"
-                  hidden
-                  onChange={handleIconChange}
-                />
-              </label>
-              {preview && (
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline-danger ms-2"
-                  onClick={() => {
-                    setIcon(null);
-                    setPreview(null);
-                  }}
-                >
-                  Xóa
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="mb-3">
-          <label className="form-label">Thứ tự hiển thị</label>
-          <input
-            type="number"
-            name="sort_order"
-            className="form-control"
-            value={formData.sort_order}
-            onChange={handleChange}
-          />
-        </div>
-
-        <div className="form-check mb-3">
-          <input
-            type="checkbox"
-            name="is_active"
-            className="form-check-input"
-            checked={formData.is_active}
-            onChange={handleChange}
-          />
-          <label className="form-check-label">Hoạt động</label>
-        </div>
-
-        <button type="submit" className="btn btn-primary">
-          Lưu danh mục
-        </button>
-      </form>
-    </div>
-  );
-};
-
-export default AdminAddGiftCategory;
+    );
+}
